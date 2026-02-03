@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIS 655 Flashcard App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .flashcard {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .deck-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f0f7ff;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .deck-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .ai-answer {
+            background-color: #e7f3ff;
+            border-left: 4px solid #0d6efd;
+            padding: 10px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+        }
+        .ai-answer ul, .ai-answer ol {
+            padding-left: 20px;
+        }
+        .ai-answer p {
+            margin-bottom: 0.75rem;
+        }
+        .ai-answer h1, .ai-answer h2, .ai-answer h3, .ai-answer h4 {
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            margin-right: 0.5rem;
+            border: 0.15em solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: spinner-border .75s linear infinite;
+        }
+        @keyframes spinner-border {
+            to { transform: rotate(360deg); }
+        }
+        #decksView, #flashcardsView {
+            display: none;
+        }
+        .back-button {
+            cursor: pointer;
+            color: #0d6efd;
+            margin-bottom: 20px;
+        }
+        .back-button:hover {
+            text-decoration: underline;
+        }
+        .flashcard-image img {
+            max-height: 200px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        #imagePreview img {
+            max-height: 200px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Patrick's Funky Flashcard App</h1>
+        
+        <!-- Decks View -->
+        <div id="decksView">
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            Create New Deck
+                        </div>
+                        <div class="card-body">
+                            <form id="newDeckForm">
+                                <div class="mb-3">
+                                    <label for="deckName" class="form-label">Deck Name</label>
+                                    <input type="text" class="form-control" id="deckName" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="deckDescription" class="form-label">Description (optional)</label>
+                                    <textarea class="form-control" id="deckDescription" rows="2"></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Create Deck</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h2>Your Flashcard Decks</h2>
+            <div id="decksContainer" class="row"></div>
+        </div>
+        
+        <!-- Flashcards View -->
+        <div id="flashcardsView">
+            <div class="back-button" id="backToDecks">
+                <i class="bi bi-arrow-left"></i> Back to Decks
+            </div>
+            
+            <h2 id="currentDeckName"></h2>
+            <p id="currentDeckDescription" class="text-muted mb-4"></p>
+            
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            Create New Flashcard
+                        </div>
+                        <div class="card-body">
+                            <form id="newFlashcardForm">
+                                <input type="hidden" id="currentDeckId">
+                                <div class="mb-3">
+                                    <label for="question" class="form-label">Question</label>
+                                    <input type="text" class="form-control" id="question" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="answer" class="form-label">Answer</label>
+                                    <textarea class="form-control" id="answer" rows="3" required></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="imageUpload" class="form-label">Image (optional)</label>
+                                    <input type="file" class="form-control" id="imageUpload" accept="image/*">
+                                    <div id="imagePreview" class="mt-2 d-none">
+                                        <img id="uploadedImage" class="img-fluid">
+                                        <button type="button" id="removeImageBtn" class="btn btn-sm btn-outline-danger mt-2">Remove Image</button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="tags" class="form-label">Tags (comma separated)</label>
+                                    <input type="text" class="form-control" id="tags">
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <button type="submit" class="btn btn-primary">Create Flashcard</button>
+                                    <button type="button" id="generateAnswerBtn" class="btn btn-outline-primary">
+                                        Ask Gemini
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div id="aiAnswerCard" class="card d-none">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Gemini's Answer</span>
+                            <button type="button" id="useAiAnswerBtn" class="btn btn-sm btn-success">
+                                Use This Answer
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="aiAnswerContent" class="ai-answer"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>Flashcards in this Deck</h3>
+            <div id="flashcardsContainer"></div>
+        </div>
+        
+        <!-- View Flashcard Modal -->
+        <div class="modal fade" id="viewQuestionModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="modalQuestionTitle"></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="modalImageContainer" class="mb-3 d-none">
+                            <!-- Image will be inserted here -->
+                        </div>
+                        <div class="mb-3">
+                            <h6>Your Answer:</h6>
+                            <div id="modalAnswer" class="p-2 border rounded"></div>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-primary" id="askGeminiBtn">
+                                Ask Gemini for Help
+                            </button>
+                        </div>
+                        <div id="modalAiAnswer" class="ai-answer mt-3 d-none"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Delete Confirmation Modal -->
+        <div class="modal fade" id="deleteConfirmModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Confirm Delete</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="deleteConfirmMessage"></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Application state
+        let currentQuestion = '';
+        let deleteItemId = '';
+        let deleteItemType = '';
+        let uploadedImageUrl = null;
+        
+        // Show the appropriate view on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check if we have a deck ID in the URL
+            const pathParts = window.location.pathname.split('/');
+            if (pathParts.length > 2 && pathParts[1] === 'deck') {
+                const deckId = pathParts[2];
+                loadDeck(deckId);
+            } else {
+                // Show decks view by default
+                showDecksView();
+            }
+            
+            // Set up image preview
+            document.getElementById('imageUpload').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        document.getElementById('uploadedImage').src = e.target.result;
+                        document.getElementById('imagePreview').classList.remove('d-none');
+                    }
+                    reader.readAsDataURL(file);
+                }
+            });
+            
+            // Remove image button
+            document.getElementById('removeImageBtn').addEventListener('click', function() {
+                document.getElementById('imageUpload').value = '';
+                document.getElementById('imagePreview').classList.add('d-none');
+                uploadedImageUrl = null;
+            });
+        });
+        
+        // Function to upload image
+        async function uploadImage() {
+            const imageInput = document.getElementById('imageUpload');
+            if (imageInput.files.length === 0) {
+                return null;
+            }
+            
+            // Show loading indicator
+            const formButton = document.querySelector('#newFlashcardForm button[type="submit"]');
+            const originalButtonText = formButton.innerHTML;
+            formButton.disabled = true;
+            formButton.innerHTML = '<span class="loading-spinner"></span>Uploading image...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('image', imageInput.files[0]);
+                
+                const response = await fetch('/api/upload-image', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to upload image');
+                }
+                
+                const result = await response.json();
+                return result.image_url;
+            } catch (error) {
+                console.error('Error uploading image:', error);
+                throw error;
+            } finally {
+                // Reset button state
+                formButton.disabled = false;
+                formButton.innerHTML = originalButtonText;
+            }
+        }
+        
+        // View management functions
+        function showDecksView() {
+            document.getElementById('decksView').style.display = 'block';
+            document.getElementById('flashcardsView').style.display = 'none';
+            fetchDecks();
+            // Update URL without refreshing
+            window.history.pushState({}, '', '/');
+        }
+        
+        function showFlashcardsView(deckId, deckName, deckDescription) {
+            document.getElementById('decksView').style.display = 'none';
+            document.getElementById('flashcardsView').style.display = 'block';
+            document.getElementById('currentDeckId').value = deckId;
+            document.getElementById('currentDeckName').textContent = deckName;
+            document.getElementById('currentDeckDescription').textContent = deckDescription || '';
+            fetchFlashcards(deckId);
+            // Update URL without refreshing
+            window.history.pushState({}, '', `/deck/${deckId}`);
+        }
+        
+        // Back button logic
+        document.getElementById('backToDecks').addEventListener('click', showDecksView);
+        
+        // Create new deck
+        document.getElementById('newDeckForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('deckName').value;
+            const description = document.getElementById('deckDescription').value;
+            
+            try {
+                const response = await fetch('/api/decks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name,
+                        description
+                    }),
+                });
+                
+                if (response.ok) {
+                    const deck = await response.json();
+                    document.getElementById('newDeckForm').reset();
+                    // Navigate to the new deck
+                    showFlashcardsView(deck.id, deck.name, deck.description);
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.error);
+                }
+            } catch (error) {
+                console.error('Error creating deck:', error);
+                alert('Failed to create deck');
+            }
+        });
+        
+        // Fetch all decks
+        async function fetchDecks() {
+            try {
+                const response = await fetch('/api/decks');
+                if (response.ok) {
+                    const decks = await response.json();
+                    displayDecks(decks);
+                } else {
+                    const error = await response.json();
+                    console.error('Error fetching decks:', error);
+                }
+            } catch (error) {
+                console.error('Failed to fetch decks:', error);
+            }
+        }
+        
+        // Display decks
+        function displayDecks(decks) {
+            const container = document.getElementById('decksContainer');
+            container.innerHTML = '';
+            
+            if (decks.length === 0) {
+                container.innerHTML = '<div class="col-12"><p>No flashcard decks yet. Create your first one!</p></div>';
+                return;
+            }
+            
+            decks.forEach(deck => {
+                const deckEl = document.createElement('div');
+                deckEl.className = 'col-md-4 mb-4';
+                deckEl.innerHTML = `
+                    <div class="deck-card" data-id="${deck.id}" data-name="${deck.name}" data-description="${deck.description || ''}">
+                        <h3>${deck.name}</h3>
+                        <p class="text-muted">${deck.description || 'No description'}</p>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <small>${formatDate(deck.created_at)}</small>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-danger delete-deck-btn" data-id="${deck.id}" data-name="${deck.name}">
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(deckEl);
+                
+                // Open deck when clicked
+                deckEl.querySelector('.deck-card').addEventListener('click', function(e) {
+                    // Ignore if clicked on a button
+                    if (e.target.tagName === 'BUTTON') return;
+                    
+                    const deckId = this.dataset.id;
+                    const deckName = this.dataset.name;
+                    const deckDescription = this.dataset.description;
+                    loadDeck(deckId, deckName, deckDescription);
+                });
+                
+                // Delete deck
+                deckEl.querySelector('.delete-deck-btn').addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent opening the deck
+                    const deckId = e.currentTarget.dataset.id;
+                    const deckName = e.currentTarget.dataset.name;
+                    
+                    // Setup delete confirmation
+                    document.getElementById('deleteConfirmMessage').textContent = 
+                        `Are you sure you want to delete the deck "${deckName}" and all its flashcards?`;
+                    deleteItemId = deckId;
+                    deleteItemType = 'deck';
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+                    modal.show();
+                });
+            });
+        }
+        
+        // Load a specific deck
+        function loadDeck(deckId, deckName, deckDescription) {
+            if (deckName && deckDescription !== undefined) {
+                // If we already have the deck info, show it directly
+                showFlashcardsView(deckId, deckName, deckDescription);
+            } else {
+                // Otherwise, fetch the deck info first
+                fetch(`/api/decks/${deckId}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            // If deck not found, go back to decks view
+                            showDecksView();
+                            throw new Error('Deck not found');
+                        }
+                        return response.json();
+                    })
+                    .then(deck => {
+                        showFlashcardsView(deck.id, deck.name, deck.description);
+                    })
+                    .catch(error => {
+                        console.error('Error loading deck:', error);
+                        showDecksView();
+                    });
+            }
+        }
+        
+        // Confirm Delete button logic
+        document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+            try {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('deleteConfirmModal'));
+                modal.hide();
+                
+                if (deleteItemType === 'deck') {
+                    const response = await fetch(`/api/decks/${deleteItemId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        fetchDecks();
+                    } else {
+                        const error = await response.json();
+                        alert('Error: ' + error.error);
+                    }
+                } else if (deleteItemType === 'flashcard') {
+                    const response = await fetch(`/api/flashcards/${deleteItemId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        const deckId = document.getElementById('currentDeckId').value;
+                        fetchFlashcards(deckId);
+                    } else {
+                        const error = await response.json();
+                        alert('Error: ' + error.error);
+                    }
+                }
+            } catch (error) {
+                console.error(`Error deleting ${deleteItemType}:`, error);
+                alert(`Failed to delete ${deleteItemType}`);
+            }
+        });
+        
+        // Create new flashcard
+        document.getElementById('newFlashcardForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = e.currentTarget.querySelector('button[type="submit"]');
+            const originalBtnText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="loading-spinner"></span>Creating...';
+            
+            const deckId = document.getElementById('currentDeckId').value;
+            const question = document.getElementById('question').value;
+            const answer = document.getElementById('answer').value;
+            const tagsInput = document.getElementById('tags').value;
+            const tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()) : [];
+            
+            try {
+                // Handle image upload first if there's an image
+                let imageUrl = null;
+                if (document.getElementById('imageUpload').files.length > 0) {
+                    try {
+                        imageUrl = await uploadImage();
+                    } catch (error) {
+                        console.error('Error uploading image:', error);
+                        alert('Failed to upload image. Please try again.');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalBtnText;
+                        return;
+                    }
+                }
+                
+                const response = await fetch('/api/flashcards', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        deck_id: deckId,
+                        question,
+                        answer,
+                        tags,
+                        image_url: imageUrl
+                    }),
+                });
+                
+                if (response.ok) {
+                    // Clear form and refresh flashcards
+                    document.getElementById('newFlashcardForm').reset();
+                    document.getElementById('currentDeckId').value = deckId; // Restore deck ID
+                    document.getElementById('aiAnswerCard').classList.add('d-none');
+                    document.getElementById('imagePreview').classList.add('d-none');
+                    fetchFlashcards(deckId);
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.error || 'Failed to create flashcard'));
+                }
+            } catch (error) {
+                console.error('Error creating flashcard:', error);
+                alert('Failed to create flashcard');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+            }
+        });
+        
+        // Generate AI answer for new flashcard
+        document.getElementById('generateAnswerBtn').addEventListener('click', async () => {
+            const question = document.getElementById('question').value.trim();
+            
+            if (!question) {
+                alert('Please enter a question first');
+                return;
+            }
+            
+            try {
+                // Show loading state
+                const generateBtn = document.getElementById('generateAnswerBtn');
+                const originalText = generateBtn.innerHTML;
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<span class="loading-spinner"></span>Generating...';
+                
+                const response = await fetch('/api/generate-answer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question
+                    }),
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const aiAnswerContent = document.getElementById('aiAnswerContent');
+                    
+                    // Use textContent instead of innerHTML for security, then apply formatting
+                    aiAnswerContent.textContent = result.answer;
+                    // Apply formatting to the content
+                    formatGeminiContent(aiAnswerContent);
+                    
+                    document.getElementById('aiAnswerCard').classList.remove('d-none');
+                    currentQuestion = question;
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.error || 'Failed to generate answer'));
+                }
+            } catch (error) {
+                console.error('Error generating answer:', error);
+                alert('Failed to generate answer with AI');
+            } finally {
+                // Reset button state
+                const generateBtn = document.getElementById('generateAnswerBtn');
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = 'Ask Gemini';
+            }
+        });
+        
+        // Use AI answer in the form
+        document.getElementById('useAiAnswerBtn').addEventListener('click', () => {
+            const aiAnswer = document.getElementById('aiAnswerContent').textContent;
+            document.getElementById('answer').value = aiAnswer;
+        });
+        
+        // Fetch flashcards for a deck
+        async function fetchFlashcards(deckId) {
+            try {
+                const response = await fetch(`/api/flashcards?deck_id=${deckId}`);
+                if (response.ok) {
+                    const flashcards = await response.json();
+                    displayFlashcards(flashcards);
+                } else {
+                    const error = await response.json();
+                    console.error('Error fetching flashcards:', error);
+                }
+            } catch (error) {
+                console.error('Failed to fetch flashcards:', error);
+            }
+        }
+        
+        // Display flashcards
+        function displayFlashcards(flashcards) {
+            const container = document.getElementById('flashcardsContainer');
+            container.innerHTML = '';
+            
+            if (flashcards.length === 0) {
+                container.innerHTML = '<p>No flashcards in this deck yet. Create your first one!</p>';
+                return;
+            }
+            
+            flashcards.forEach(flashcard => {
+                // Create image HTML if the flashcard has an image
+                const imageHtml = flashcard.image_url ? 
+                    `<div class="flashcard-image">
+                        <img src="${flashcard.image_url}" class="img-fluid" alt="Flashcard image">
+                    </div>` : '';
+                
+                const card = document.createElement('div');
+                card.className = 'flashcard';
+                card.innerHTML = `
+                    <h3>${flashcard.question}</h3>
+                    ${imageHtml}
+                    <div class="d-flex justify-content-between mt-3">
+                        <button class="btn btn-sm btn-outline-primary show-answer-btn">
+                            Show Answer
+                        </button>
+                        <button class="btn btn-sm btn-primary view-detail-btn" 
+                                data-id="${flashcard.id}" 
+                                data-question="${flashcard.question}"
+                                data-answer="${flashcard.answer.replace(/"/g, '&quot;')}"
+                                data-image="${flashcard.image_url || ''}">
+                            View Detail
+                        </button>
+                    </div>
+                    <div class="answer mt-2 d-none">
+                        <hr>
+                        <p><strong>Answer:</strong> ${flashcard.answer}</p>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-danger delete-btn" data-id="${flashcard.id}" data-question="${flashcard.question.substring(0, 30)}...">
+                                Delete
+                            </button>
+                        </div>
+                    </div>`;
+                
+                container.appendChild(card);
+                
+                // Toggle answer visibility
+                card.querySelector('.show-answer-btn').addEventListener('click', (e) => {
+                    const answerDiv = card.querySelector('.answer');
+                    if (answerDiv.classList.contains('d-none')) {
+                        answerDiv.classList.remove('d-none');
+                        e.currentTarget.textContent = 'Hide Answer';
+                    } else {
+                        answerDiv.classList.add('d-none');
+                        e.currentTarget.textContent = 'Show Answer';
+                    }
+                });
+                
+                // Open detail modal
+                card.querySelector('.view-detail-btn').addEventListener('click', (e) => {
+                    const question = e.currentTarget.dataset.question;
+                    const answer = e.currentTarget.dataset.answer;
+                    const imageUrl = e.currentTarget.dataset.image;
+                    
+                    document.getElementById('modalQuestionTitle').textContent = question;
+                    
+                    // Display image if available
+                    const modalImageContainer = document.getElementById('modalImageContainer');
+                    if (imageUrl) {
+                        modalImageContainer.innerHTML = `<img src="${imageUrl}" class="img-fluid mb-3" alt="Flashcard image">`;
+                        modalImageContainer.classList.remove('d-none');
+                    } else {
+                        modalImageContainer.innerHTML = '';
+                        modalImageContainer.classList.add('d-none');
+                    }
+                    
+                    // Display formatted answer if it has HTML, otherwise use as is
+                    const modalAnswer = document.getElementById('modalAnswer');
+                    if (answer.includes('<') && answer.includes('>')) {
+                        modalAnswer.innerHTML = answer;
+                    } else {
+                        modalAnswer.textContent = answer;
+                        // Apply basic formatting if it's plain text
+                        formatGeminiContent(modalAnswer);
+                    }
+                    
+                    document.getElementById('modalAiAnswer').classList.add('d-none');
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('viewQuestionModal'));
+                    modal.show();
+                });
+                
+                // Delete flashcard
+                card.querySelector('.delete-btn').addEventListener('click', (e) => {
+                    const id = e.currentTarget.dataset.id;
+                    const question = e.currentTarget.dataset.question;
+                    
+                    // Setup delete confirmation
+                    document.getElementById('deleteConfirmMessage').textContent = 
+                        `Are you sure you want to delete this flashcard: "${question}"?`;
+                    deleteItemId = id;
+                    deleteItemType = 'flashcard';
+                    
+                    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+                    modal.show();
+                });
+            });
+        }
+        
+        // Ask Gemini for help with a flashcard
+        document.getElementById('askGeminiBtn').addEventListener('click', async () => {
+            const question = document.getElementById('modalQuestionTitle').textContent;
+            
+            try {
+                // Show loading state
+                const askBtn = document.getElementById('askGeminiBtn');
+                askBtn.disabled = true;
+                askBtn.innerHTML = '<span class="loading-spinner"></span>Asking Gemini...';
+                
+                const response = await fetch('/api/generate-answer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question
+                    }),
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    const aiAnswerDiv = document.getElementById('modalAiAnswer');
+                    // Use textContent for security then apply formatting
+                    aiAnswerDiv.textContent = result.answer;
+                    // Apply formatting to the content
+                    formatGeminiContent(aiAnswerDiv);
+                    aiAnswerDiv.classList.remove('d-none');
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + (error.error || 'Failed to get answer from Gemini'));
+                }
+            } catch (error) {
+                console.error('Error asking Gemini:', error);
+                alert('Failed to get answer from Gemini');
+            } finally {
+                // Reset button state
+                const askBtn = document.getElementById('askGeminiBtn');
+                askBtn.disabled = false;
+                askBtn.innerHTML = 'Ask Gemini for Help';
+            }
+        });
+        
+        // Helper function to format dates
+        function formatDate(timestamp) {
+            if (!timestamp) return '';
+            
+            // Check if it's a Firestore timestamp
+            if (timestamp.seconds) {
+                timestamp = new Date(timestamp.seconds * 1000);
+            } else if (typeof timestamp === 'string') {
+                timestamp = new Date(timestamp);
+            }
+            
+            // Format the date
+            return timestamp.toLocaleDateString();
+        }
+        
+        // Function to format Gemini content with basic markdown-like styling
+        function formatGeminiContent(element) {
+            // This is a simple implementation that can be expanded for more markdown-like formatting
+            let text = element.textContent;
+            
+            // Replace double newlines with paragraph breaks
+            text = text.replace(/\n\n/g, '</p><p>');
+            
+            // Replace single newlines with line breaks
+            text = text.replace(/\n/g, '<br>');
+            
+            // Process bullet points
+            text = text.replace(/^[*-]\s+(.*)/gm, '<li>$1</li>');
+            text = text.replace(/<li>(.*?)<\/li>/g, '<ul><li>$1</li></ul>');
+            text = text.replace(/<\/ul><ul>/g, '');
+            
+            // Process numbered lists
+            text = text.replace(/^\d+\.\s+(.*)/gm, '<li>$1</li>');
+            text = text.replace(/<li>(.*?)<\/li>/g, '<ol><li>$1</li></ol>');
+            text = text.replace(/<\/ol><ol>/g, '');
+            
+            // Wrap in paragraph if not already
+            if (!text.startsWith('<p>')) {
+                text = '<p>' + text + '</p>';
+            }
+            
+            // Set the formatted HTML
+            element.innerHTML = text;
+        }
+    </script>
+</body>
+</html>
